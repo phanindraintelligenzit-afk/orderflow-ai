@@ -1,150 +1,146 @@
-import { useQuery } from '@tanstack/react-query'
-import { getDashboard } from '../api/client'
-import StatusBadge from '../components/StatusBadge'
+import { useQuery } from '@tanstack/react-query';
+import { getDashboard } from '../api/client';
+import StatusBadge from '../components/StatusBadge';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend,
-} from 'recharts'
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend,
+} from 'recharts';
+import { DollarSign, ShoppingCart, Clock, AlertTriangle } from 'lucide-react';
 
-const STATUS_COLORS: Record<string, string> = {
-  pending: '#9ca3af',
-  completed: '#22c55e',
-  failed: '#ef4444',
-  intake: '#3b82f6',
-  inventory_check: '#6366f1',
-  erp_sync: '#a855f7',
-  fulfillment: '#06b6d4',
-  invoice: '#f97316',
-  reconciliation: '#14b8a6',
-}
+const PIE_COLORS = ['#3b82f6', '#22c55e', '#ef4444', '#f59e0b', '#6b7280'];
 
 export default function Dashboard() {
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['dashboard'],
     queryFn: getDashboard,
-    refetchInterval: 10_000,
-  })
+    refetchInterval: 10000,
+  });
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-400">Loading dashboard...</div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
       </div>
-    )
+    );
   }
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-red-500">Failed to load dashboard data. Is the backend running?</div>
-      </div>
-    )
-  }
-
-  const pieData = data
-    ? Object.entries(data.orders_by_status).map(([name, value]) => ({
-        name: name.charAt(0).toUpperCase() + name.slice(1).replace(/_/g, ' '),
-        value,
-      }))
-    : []
-
-  const processingTime = data?.avg_processing_time_seconds
-    ? `${(data.avg_processing_time_seconds).toFixed(1)}s`
-    : 'N/A'
+  const statusData = data?.orders_by_status
+    ? Object.entries(data.orders_by_status).map(([name, value]) => ({ name, value }))
+    : [];
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
+        <p className="text-gray-500 mt-1">Order-to-Cash Pipeline Overview</p>
+      </div>
 
-      {/* Metric cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="text-sm text-gray-500 font-medium mb-1">Total Orders</div>
-          <div className="text-3xl font-bold">{data?.total_orders ?? 0}</div>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="text-sm text-gray-500 font-medium mb-1">Completed</div>
-          <div className="text-3xl font-bold text-green-600">
-            {data?.orders_by_status?.completed ?? 0}
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-blue-100 rounded-lg">
+              <ShoppingCart className="w-6 h-6 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Total Orders</p>
+              <p className="text-2xl font-bold text-gray-900">{data?.total_orders || 0}</p>
+            </div>
           </div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="text-sm text-gray-500 font-medium mb-1">Avg Processing Time</div>
-          <div className="text-3xl font-bold">{processingTime}</div>
+
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-green-100 rounded-lg">
+              <DollarSign className="w-6 h-6 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Total Revenue</p>
+              <p className="text-2xl font-bold text-gray-900">
+                ${(data?.total_revenue || 0).toLocaleString()}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-yellow-100 rounded-lg">
+              <Clock className="w-6 h-6 text-yellow-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Avg Processing Time</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {data?.avg_processing_time_hours ? `${data.avg_processing_time_hours.toFixed(1)}h` : 'N/A'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-red-100 rounded-lg">
+              <AlertTriangle className="w-6 h-6 text-red-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Exceptions (24h)</p>
+              <p className="text-2xl font-bold text-gray-900">{data?.recent_exceptions || 0}</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Pie chart - status breakdown */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold mb-4">Orders by Status</h2>
-          {pieData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={280}>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={2}
-                  dataKey="value"
-                >
-                  {pieData.map(entry => (
-                    <Cell key={entry.name} fill={STATUS_COLORS[entry.name.toLowerCase().replace(/ /g, '_')] || '#9ca3af'} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="text-center py-16 text-gray-400">No data yet</div>
-          )}
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Orders by Status</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={statusData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
 
-        {/* Bar chart */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold mb-4">Order Status Distribution</h2>
-          {pieData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={pieData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="text-center py-16 text-gray-400">No data yet</div>
-          )}
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Order Status Distribution</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <PieChart>
+              <Pie
+                data={statusData}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={100}
+                paddingAngle={2}
+                dataKey="value"
+                label={({ name, value }) => `${name}: ${value}`}
+              >
+                {statusData.map((_, idx) => (
+                  <Cell key={`cell-${idx}`} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
-      {/* Recent exceptions */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold mb-4">Recent Exceptions</h2>
-        {data?.recent_exceptions && data.recent_exceptions.length > 0 ? (
-          <div className="space-y-3">
-            {data.recent_exceptions.map((exc, i) => (
-              <div key={i} className="flex items-start gap-3 p-3 bg-red-50 rounded-lg border border-red-100">
-                <span className="text-red-500 mt-0.5">⚠️</span>
-                <div>
-                  <div className="text-sm font-medium text-red-700">
-                    {(exc.payload as Record<string, unknown>)?.agent as string || 'Unknown'} failed
-                  </div>
-                  <div className="text-xs text-red-500 mt-1">
-                    {(exc.payload as Record<string, unknown>)?.error as string || exc.event_type as string}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-8 text-gray-400">No recent exceptions</div>
-        )}
+      {/* Status legend */}
+      <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <h3 className="text-lg font-semibold text-gray-900 mb-3">Order Statuses</h3>
+        <div className="flex flex-wrap gap-2">
+          {statusData.map((s) => (
+            <div key={s.name} className="flex items-center gap-2">
+              <StatusBadge status={s.name} />
+              <span className="text-sm text-gray-500">({s.value})</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
-  )
+  );
 }

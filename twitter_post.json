@@ -1,0 +1,4 @@
+{
+  "text": "We just shipped OrderFlow AI -- an open-source multi-agent system for Order-to-Cash automation.\n\nWhat it does: 7 LangGraph agents (intake, inventory, ERP sync, fulfillment, invoice, reconciliation, exception handler) work together to orchestrate orders across your enterprise systems.\n\nTech stack: Python FastAPI backend with LangGraph orchestration, React/TypeScript frontend, PostgreSQL + Redis, all Dockerized.\n\nFree and open source: https://github.com/phanindraintelligenzit-afk/orderflow-ai\n\nBuilt by AgentsFactory.",
+  "platforms": ["twitter"]
+}

@@ -1,0 +1,4 @@
+{
+  "text": "Excited to unveil OrderFlow AI -- an open-source, multi-agent Order-to-Cash orchestration engine we built at AgentsFactory.\n\nEnterprises lose millions to order mismatches, delayed invoices, and cross-system data drift. OrderFlow AI uses 7 specialized LangGraph agents to automate the entire O2C pipeline: order intake, inventory checking, ERP syncing, fulfillment tracking, invoicing, reconciliation, and exception handling.\n\nBuilt with Python/FastAPI, React/TypeScript, PostgreSQL, and Docker. Every component is fully open source and ready to deploy.\n\nCheck it out on GitHub: https://github.com/phanindraintelligenzit-afk/orderflow-ai",
+  "platforms": ["linkedin"]
+}

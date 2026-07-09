@@ -89,3 +89,206 @@ def build_workflow_graph():
 
 
 compiled_graph = build_workflow_graph()
+
+
+def run_order_workflow(order_id: str):
+    """Execute the full pipeline of agents for an order."""
+    from app.database import SessionLocal
+    from app.models import Order, WorkflowState, SystemEvent
+    import uuid
+    from datetime import datetime, timezone
+    from app.agents.orchestrator import PIPELINE, AGENT_MAP
+
+    db = SessionLocal()
+    try:
+        uid = uuid.UUID(order_id)
+        order = db.query(Order).filter(Order.id == uid).first()
+        if not order:
+            return
+        order.status = "processing"
+        items = [{"sku": i.sku, "quantity": i.quantity, "unit_price": i.unit_price} for i in order.items]
+        db.commit()
+    finally:
+        db.close()
+
+    state = {
+        "order_id": order_id,
+        "customer_id": order.customer_id if order else "",
+        "items": items if order else [],
+        "notes": getattr(order, "notes", "") or "",
+        "current_agent": "",
+        "error": "",
+        "retry_count": 0,
+        "max_retries": 3,
+        "escalation": "",
+    }
+
+    for agent_name in PIPELINE:
+        agent_func = AGENT_MAP.get(agent_name)
+        if not agent_func:
+            continue
+
+        state["current_agent"] = agent_name
+        state["error"] = ""
+
+        db = SessionLocal()
+        try:
+            uid = uuid.UUID(order_id)
+            ws = db.query(WorkflowState).filter(
+                WorkflowState.order_id == uid, WorkflowState.agent_name == agent_name
+            ).first()
+            if not ws:
+                ws = WorkflowState(
+                    id=uuid.uuid4(), order_id=uid, agent_name=agent_name,
+                    status="running", input_data=dict(state),
+                    started_at=datetime.now(timezone.utc),
+                )
+                db.add(ws)
+            else:
+                ws.status = "running"
+                ws.started_at = datetime.now(timezone.utc)
+            db.commit()
+        finally:
+            db.close()
+
+        try:
+            state = agent_func(state)
+            success = not state.get("error")
+
+            db = SessionLocal()
+            try:
+                uid = uuid.UUID(order_id)
+                ws = db.query(WorkflowState).filter(
+                    WorkflowState.order_id == uid, WorkflowState.agent_name == agent_name
+                ).first()
+                if ws:
+                    ws.status = "completed" if success else "failed"
+                    ws.output_data = dict(state)
+                    ws.error_message = state.get("error") if not success else None
+                    ws.completed_at = datetime.now(timezone.utc)
+                ev = SystemEvent(
+                    order_id=uid,
+                    event_type="agent_completed" if success else "agent_failed",
+                    payload={"agent": agent_name, "status": ws.status if ws else "unknown"},
+                )
+                db.add(ev)
+                db.commit()
+            finally:
+                db.close()
+
+            if not success:
+                db = SessionLocal()
+                try:
+                    uid = uuid.UUID(order_id)
+                    o = db.query(Order).filter(Order.id == uid).first()
+                    if o:
+                        o.status = "exception"
+                    db.commit()
+                finally:
+                    db.close()
+                return
+
+        except Exception as e:
+            db = SessionLocal()
+            try:
+                uid = uuid.UUID(order_id)
+                ws = db.query(WorkflowState).filter(
+                    WorkflowState.order_id == uid, WorkflowState.agent_name == agent_name
+                ).first()
+                if ws:
+                    ws.status = "failed"
+                    ws.error_message = str(e)
+                    ws.completed_at = datetime.now(timezone.utc)
+                o = db.query(Order).filter(Order.id == uid).first()
+                if o:
+                    o.status = "exception"
+                db.commit()
+            finally:
+                db.close()
+            return
+
+    db = SessionLocal()
+    try:
+        uid = uuid.UUID(order_id)
+        o = db.query(Order).filter(Order.id == uid).first()
+        if o:
+            o.status = "reconciled"
+        ev = SystemEvent(order_id=uid, event_type="workflow_completed", payload={"status": "reconciled"})
+        db.add(ev)
+        db.commit()
+    finally:
+        db.close()
+
+
+def run_order_workflow_step(order_id: str, agent_name: str):
+    """Retry a single agent step."""
+    from app.database import SessionLocal
+    from app.models import WorkflowState, Order, SystemEvent
+    from datetime import datetime, timezone
+    from app.agents.orchestrator import AGENT_MAP
+    import uuid
+
+    agent_func = AGENT_MAP.get(agent_name)
+    if not agent_func:
+        return
+
+    db = SessionLocal()
+    try:
+        uid = uuid.UUID(order_id)
+        ws = db.query(WorkflowState).filter(
+            WorkflowState.order_id == uid, WorkflowState.agent_name == agent_name
+        ).first()
+        state = ws.input_data or {} if ws else {}
+    finally:
+        db.close()
+
+    state["retry_count"] = state.get("retry_count", 0) + 1
+    state["error"] = ""
+
+    db = SessionLocal()
+    try:
+        uid = uuid.UUID(order_id)
+        ws = db.query(WorkflowState).filter(
+            WorkflowState.order_id == uid, WorkflowState.agent_name == agent_name
+        ).first()
+        if ws:
+            ws.status = "running"
+            ws.started_at = datetime.now(timezone.utc)
+        o = db.query(Order).filter(Order.id == uid).first()
+        if o:
+            o.status = "processing"
+        db.commit()
+    finally:
+        db.close()
+
+    try:
+        state = agent_func(state)
+        db = SessionLocal()
+        try:
+            uid = uuid.UUID(order_id)
+            ws = db.query(WorkflowState).filter(
+                WorkflowState.order_id == uid, WorkflowState.agent_name == agent_name
+            ).first()
+            if ws:
+                ws.status = "completed"
+                ws.output_data = dict(state)
+                ws.completed_at = datetime.now(timezone.utc)
+            ev = SystemEvent(order_id=uid, event_type="agent_retried", payload={"agent": agent_name, "result": "success"})
+            db.add(ev)
+            db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        db = SessionLocal()
+        try:
+            uid = uuid.UUID(order_id)
+            ws = db.query(WorkflowState).filter(
+                WorkflowState.order_id == uid, WorkflowState.agent_name == agent_name
+            ).first()
+            if ws:
+                ws.status = "failed"
+                ws.error_message = str(e)
+                ws.completed_at = datetime.now(timezone.utc)
+            db.commit()
+        finally:
+            db.close()
